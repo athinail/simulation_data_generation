@@ -1,2 +1,45 @@
+# Data directories
 Data/
 Data2_fixed_ylim/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+pytorch_p38_new/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Video files (generated outputs)
+*.mp4
+*.avi
+
+# Temporary/test files
+positions.txt
+times.txt
+velocities.txt
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/

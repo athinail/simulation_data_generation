@@ -5,15 +5,19 @@ import random
 import cv2
 import json
 from scipy.integrate import odeint
+import matplotlib
+matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.animation import FuncAnimation, FFMpegWriter
+from pathlib import Path
 from ShapeDynamicsSimulator import CircleSimulationGravity, FancyBoxSimulationGravitySpringDamper, FancyBoxSimulationGravity
 import matplotlib.colors as mcolors
 from YOLO_annotations_extract2 import VideoAnnotationProcessor
 from utils import copy_jpg_files, ndarray_to_list, get_next_video_id
 
-data_directory = '/home/ailioudi/Documents/PythonProjects/github_projects/simulation_data_generation/Data2_fixed_ylim'
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+data_directory = PROJECT_ROOT / 'Data2_fixed_ylim'
 os.makedirs(data_directory, exist_ok=True)
 
 def save_data_to_annotations_json(file_name, bounding_box_coordinates, position_data, velocity_data, acceleration_data, frameTime_data):
@@ -81,106 +85,102 @@ def save_all_data_to_json(file_name, video_filename, class_category, bounding_bo
     with open(file_name, 'w') as f:
         json.dump(annotations_all, f, indent=4, ensure_ascii=False)
 
-def run_simulation( set, class_category, shape_params, init_conditions, timesteps, color):
+def run_simulation(set, class_category, shape_params, init_conditions, timesteps, color, args):
     if set == "train":
         # Circle - gravity
         if class_category == 0:
-            sim = CircleSimulationGravity(m=1.0, k=3.0, c=0.3, init_conditions=init_conditions, time_steps=timesteps, shape_params=shape_params, color=color, noise_mean=0, noise_std_dev=14.2)
+            sim = CircleSimulationGravity(m=args[0], k1=args[1], k2=args[2], c1=args[3], c2=args[4], init_conditions=init_conditions, time_steps=timesteps, shape_params=shape_params, color=color, noise_mean=0, noise_std_dev=0.1)
         # Square - gravity spring damper
         elif class_category == 1:
-            sim = FancyBoxSimulationGravitySpringDamper(m=1.0, k=3.0, c=0.3, init_conditions=init_conditions, time_steps=timesteps, shape_params=shape_params, color=color, noise_mean=0, noise_std_dev=0.7)
+            sim = FancyBoxSimulationGravitySpringDamper(m=args[0], k1=args[1], k2=args[2], c1=args[3], c2=args[4], init_conditions=init_conditions, time_steps=timesteps, shape_params=shape_params, color=color, noise_mean=0, noise_std_dev=0.1)
     elif set == "test":
         # Circle with corners - gravity
         if class_category == 0:
-            sim = FancyBoxSimulationGravity(m=1.0, k=3.0, c=0.3, init_conditions=init_conditions, time_steps=timesteps, shape_params=shape_params, color=color, noise_mean=0, noise_std_dev=14.2)
+            sim = FancyBoxSimulationGravity(m=args[0], k1=args[1], k2=args[2], c1=args[3], c2=args[4], init_conditions=init_conditions, time_steps=timesteps, shape_params=shape_params, color=color, noise_mean=0, noise_std_dev=0.1)
         # Square with rounded corners - gravity spring damper
         elif class_category == 1:
-            sim = FancyBoxSimulationGravitySpringDamper(m=1.0, k=3.0, c=0.3, init_conditions=init_conditions, time_steps=timesteps, shape_params=shape_params, color=color, noise_mean=0, noise_std_dev=0.7)
+            sim = FancyBoxSimulationGravitySpringDamper(m=args[0], k1=args[1], k2=args[2], c1=args[3], c2=args[4], init_conditions=init_conditions, time_steps=timesteps, shape_params=shape_params, color=color, noise_mean=0, noise_std_dev=0.1)
     return sim
 
 
-
-def main():
+def main(generate_samples=False):
+    # Mapping for folder names
+    set_folder_mapping = {
+        "train": "train_try",
+        "test": "test_try"
+    }
+    
     sets = ["train", "test"]
-    class_categories = [0 , 1] # 0 - circle (gravity), 1 - sqare (mass,sprinf,damping)
+    class_categories = [0 , 1] # 0 - circle (gravity), 1 - square (mass, spring, damping)
     timesteps = np.linspace(0, 10, 301)
     color = "green"
-    # object_colors = ["green", "indigo", "blue", "turquoise",  "fuchsia", "gold", "darkred" ,"lightblue", "peru", "tomato"]
-    # background_colors = ["white", "silver", "greenyellow", "khaki"]
     
-    # Range of initial conditions
-    initial_positions_y = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
-    initial_velocities = [0, 10, 12, 14, 15]
-    center_z_range = [2,4,6,8,10,12,14,16,18,20]
+    initial_positions_x = [13, 14, 15, 16, 17, 18]
+    initial_positions_y = [-1, 0, 1, 2, 3, 4]
+    initial_velocities_x = [0, 0, 0, 0, 0]
+    initial_velocities_y = [0, 0, 0, 0, 0]
+    args = (1.0, 3.0, 15.0, 0.3, 0.7)
 
-    # Run Circle Simulation
-    # Run Square Simulation
+    initial_conditions_range = [(x, vx, y, vy) for x in initial_positions_x for vx in initial_velocities_x for y in initial_positions_y for vy in initial_velocities_y]
 
     video_id = get_next_video_id(data_directory)
     for set_range in sets:
-        #remove the following three lines when generating the whole dataset
-        random_positions_y = random.sample(initial_positions_y, 5)
-        random_velocities = random.sample(initial_velocities, 5)
-        random_center_z_range = random.sample(center_z_range, 5)
-        for init_pos_y in random_positions_y:
-            for init_vel in random_velocities:
-                for center_z in random_center_z_range:
-                    init_conditions = [init_pos_y, init_vel]
+        if generate_samples:
+            # Create only a few samples
+            random_initial_conditions = random.sample(initial_conditions_range, 2)
+        else:
+            # Use all initial conditions
+            random_initial_conditions = initial_conditions_range
+
+        for init_cond in random_initial_conditions:
+            for class_category in class_categories:
+                if set_range == "train":
+                    if class_category == 0: # circle
+                        sim_params = {'width': 4.5, 'height': 4.5}
+                    elif class_category == 1: # square
+                        sim_params = {'width': 5.5, 'height': 4.5, 'pad': 0.0, 'color': 'green'}
+                elif set_range == "test":
+                    if class_category == 0: # circle with corners
+                        sim_params = {'width': 1, 'height': 0.5, 'pad': 2}
+                    elif class_category == 1: # square with rounded corners
+                        sim_params = {'width': 2, 'height': 1, 'pad': 2, 'color': 'green'}
                 
-                    # sim_params = {'center_z': center_z, 'center_y': init_conditions[0], 'width': 4.5, 'height': 4.5}
-                    # shape_params_square = {'center_z': center_z, 'center_y': init_conditions[0], 'width': 4.5, 'height': 3.3, 'pad': 0.0}
+                sim = run_simulation(set=set_range, class_category=class_category, shape_params=sim_params, init_conditions=init_cond, timesteps=timesteps, color=color, args=args)
+                sim.animate()
+                
+                file = f"class_{class_category}_initcond_{init_cond}_{video_id}"
+                # Use the mapped folder name (train_try or test_try)
+                folder_name = set_folder_mapping[set_range]
+                videofile_directory_name = os.path.join(data_directory, "Annotations", folder_name, file)
+                os.makedirs(videofile_directory_name, exist_ok=True)
+                YOLO_annotations_directory = os.path.join(videofile_directory_name, "YOLO_annotations")
+                os.makedirs(YOLO_annotations_directory, exist_ok=True)
 
-                    for class_category in class_categories:
-                        # Define file name for saving the animation
-                        file = f"class_{class_category}_posy_{init_pos_y}_vel_{init_vel}_centerz_{center_z}_{video_id}"
-                        videofile_directory_name = os.path.join(data_directory, "Annotations", f"{set_range}", file)
-                        os.makedirs(videofile_directory_name, exist_ok=True)
-                        YOLO_annotations_directory = os.path.join(videofile_directory_name, "YOLO_annotations")
-                        os.makedirs(YOLO_annotations_directory, exist_ok=True)
-                        if set_range == "train":
-                            if class_category == 0: #circle
-                                sim_params = {'center_z': center_z, 'center_y': init_conditions[0], 'width': 4.5, 'height': 4.5}
-                            elif class_category == 1: #square
-                                sim_params = {'center_z': center_z, 'center_y': init_conditions[0], 'width': 4.5, 'height': 3.3, 'pad': 0.0}
-                        elif  set_range == "test": 
-                            if class_category == 0: #circle with corners
-                                sim_params = {'center_z': 5, 'center_y': -0.05, 'width': 1, 'height': 0.5, 'pad': 2}
-                            elif class_category ==1: #square with rounded corners
-                                sim_params = {'center_z': 5, 'center_y': -0.05, 'width': 3, 'height': 2, 'pad': 0.8}
-                        sim = run_simulation(set=set_range, class_category=class_category, shape_params=sim_params, init_conditions=init_conditions, timesteps=timesteps, color=color)
-                        sim.animate()
-                        sim.save_animation(os.path.join(videofile_directory_name, f"{file}.mp4"))
+                sim.save_animation(os.path.join(videofile_directory_name, f"{file}.mp4"))
 
-                        # Extract data from the simulation
-                        position_data = sim.position_data
-                        velocity_data = sim.velocity_data
-                        acceleration_data = sim.acceleration_data
-                        position_data_measured = sim.position_data_noisy
-                        velocity_data_measured = sim.velocity_data_noisy
-                        acceleration_data_measured = sim.acceleration_data_noisy
-                        frameTime_data = timesteps
+                position_data = sim.position_data
+                velocity_data = sim.velocity_data
+                acceleration_data = sim.acceleration_data
+                position_data_measured = sim.position_data_noisy
+                velocity_data_measured = sim.velocity_data_noisy
+                acceleration_data_measured = sim.acceleration_data_noisy
+                frameTime_data = timesteps
 
-                        # Process the video to get bounding box coordinates
-                        
-                        video_path = os.path.join(videofile_directory_name, f"{file}.mp4")
-                        processor = VideoAnnotationProcessor(video_path, YOLO_annotations_directory , frames_dir = videofile_directory_name, object_class_id = class_category, video_id= video_id)
-                        processor.process_video()
-                        bounding_box_coordinates = processor.get_bounding_box_coordinates()
+                video_path = os.path.join(videofile_directory_name, f"{file}.mp4")
+                processor = VideoAnnotationProcessor(video_path, YOLO_annotations_directory, frames_dir=videofile_directory_name, object_class_id=class_category, video_id=video_id)
+                processor.process_video()
+                bounding_box_coordinates = processor.get_bounding_box_coordinates()
 
-                        # Save all data to JSON
-                        annotations_path = os.path.join(videofile_directory_name, "annotations.json")
-                        save_data_to_annotations_json(annotations_path, bounding_box_coordinates, position_data_measured, velocity_data_measured, acceleration_data_measured, frameTime_data)
-                        save_all_data_to_json(os.path.join(videofile_directory_name, "annotations_all.json"), f"{file}.mp4", class_category, bounding_box_coordinates, position_data, velocity_data, acceleration_data, position_data_measured, velocity_data_measured, acceleration_data_measured, frameTime_data)
+                annotations_path = os.path.join(videofile_directory_name, "annotations.json")
+                save_data_to_annotations_json(annotations_path, bounding_box_coordinates, position_data_measured, velocity_data_measured, acceleration_data_measured, frameTime_data)
+                save_all_data_to_json(os.path.join(videofile_directory_name, "annotations_all.json"), f"{file}.mp4", class_category, bounding_box_coordinates, position_data, velocity_data, acceleration_data, position_data_measured, velocity_data_measured, acceleration_data_measured, frameTime_data)
 
-                        # Call the function to save settings.json
-                        settings_path = os.path.join(videofile_directory_name, "settings.json")
-                        save_settings_json(settings_path, class_category)
+                settings_path = os.path.join(videofile_directory_name, "settings.json")
+                save_settings_json(settings_path, class_category)
 
-                        # copy jpg to the same folder with settings.json and annotations.json to get the same structure required for thesis-mathieu
-                        copy_jpg_files(YOLO_annotations_directory, videofile_directory_name)
+                copy_jpg_files(YOLO_annotations_directory, videofile_directory_name)
 
-                        video_id += 1
-
+                video_id += 1
 
 if __name__ == "__main__":
-    main()
+    main(generate_samples=True)
